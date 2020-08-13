@@ -1,5 +1,5 @@
 # Q-Layer
-Code for Q-Layer: Quantization Layer for Robust Convolutional Neural Network
+Code for the paper: Latent Space Quantization for Robust Convolutional Neural Network
 
 ## To Use
 ### Prepare Data
