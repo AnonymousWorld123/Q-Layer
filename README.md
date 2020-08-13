@@ -1,15 +1,15 @@
 # Q-Layer
-Code for Q-Layer: Quantization Layer for Robust Convolutional Neural Network
+Code for the paper: Latent Space Quantization for Robust Convolutional Neural Network
 
 ## To Use
 ### Prepare Data
 Download data to ./data
 
-### Generate validation set
+### Train a target model
 `python rawtrain.py --task CIFAR_CNN_1 --gpu 1 --save_best 1 --early_stop 40 --epochs 100`
 
 
-### Generate validation set
+### Generate a validation set
 Train a target model, then do as follows (remember to change the path in the CIFAR_generate_black_box_data() function)
 
 `python adv_test.py --task CIFAR_generate_black_box_data`
