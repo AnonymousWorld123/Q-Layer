@@ -38,20 +38,38 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 # Tools
-def get_zq(X, vq_hard):
-    train_set = vq_hard.run_variable(X = X, variable = vq_hard.z_q, BATCH_SIZE = 256)
-    temp = train_set[0]
-    for item in train_set[1:]:
-        temp = np.vstack((temp, item))
-    return temp
+def get_zq(X, vq_hard, reshape = False):
+    with vq_hard.sess.as_default():
+        with vq_hard.sess.graph.as_default():
+            feature_model = Model(vq_hard.input_x, vq_hard.z_q)
+            features = feature_model.predict(X, batch_size=256)
+    return features
 
 def get_zk(X, vq_hard):
-    train_set = vq_hard.run_variable(X=X, variable = vq_hard.z_ks, BATCH_SIZE = 256)
-    temp = train_set[0]
-    for item in train_set[1:]:
-        temp = np.hstack((temp, item))
+    with vq_hard.sess.as_default():
+        with vq_hard.sess.graph.as_default():
+            feature_model = Model(vq_hard.input_x, vq_hard.z_k)
+            features = feature_model.predict(X, batch_size=256)
+
+    temp = features
     temp = np_utils.to_categorical(np.uint8(temp), num_classes = vq_hard.num_concept, dtype=np.uint8).transpose(1,2,0, -1).reshape(X.shape[0],-1,vq_hard.num_concept)
     return temp
+
+def get_ze(X, vq_hard):
+    with vq_hard.sess.as_default():
+        with vq_hard.sess.graph.as_default():
+            feature_model = Model(vq_hard.input_x, vq_hard.z_e)
+            features = feature_model.predict(X, batch_size=256)
+    return features
+
+
+def get_cnn_feature(X, cnn):
+    with cnn.sess.as_default():
+        with cnn.sess.graph.as_default():
+            feature_model = Model(cnn.model.layers[1].layers[0].input, cnn.model.layers[1].layers[3].output)
+            features = feature_model.predict(X, batch_size=256)
+    
+    return features
 
 def get_data(X, vq_hard, batch_size = 256):
     indexs = list(range(len(X)))
@@ -243,6 +261,7 @@ def VQ_train(**args):
     i = 0
     while os.path.exists(pixelcnn_params['save_root']):
         pixelcnn_params['save_root'] = pixelcnn_params['save_root'][:-1] + '_' + str(i) + '/'
+        i = i+1
 
     pixelcnn = vq_train_pixelcnn(pixelcnn_params, vq_hard, x_train, x_q_val, y_k_val, epochs = args['epochs'])            
 
@@ -284,9 +303,128 @@ def pixel_train(**args):
     i = 0
     while os.path.exists(pixelcnn_params['save_root']):
         pixelcnn_params['save_root'] = pixelcnn_params['save_root'][:-1] + '_' + str(i) + '/'
+        i = i + 1
 
     pixelcnn = pixel_train_pixelcnn(pixelcnn_params, x_train, x_val, epochs = args['epochs'])
 
+
+import scipy.spatial.distance as distance
+
+def cosine(x, y):
+    return (x*y).sum(-1) / np.sqrt((x*x).sum(-1) * (y*y).sum(-1))
+
+def cnn_distance_evaluate(cnn, attack_file_path, x_test, gaussian = False, dimensions = [0,64]):
+    x_test_advs = np.load(attack_file_path, allow_pickle=True).item()
+    adv_distances = {}
+    x_q_test_clean = get_cnn_feature(x_test, cnn)
+    x_q_test_clean = x_q_test_clean.reshape(-1, x_q_test_clean.shape[-1])[:,dimensions[0]:dimensions[1]]
+    for key in x_test_advs:
+        if gaussian == False:
+            x_test_adv = x_test_advs[key]
+        else:
+            x_test_adv = x_test + np.random.normal(scale = key, size = x_test.shape)
+        x_q_test = get_cnn_feature(x_test_advs[key], cnn)
+        x_q_test = x_q_test.reshape(-1, x_q_test.shape[-1])[:,dimensions[0]:dimensions[1]]
+        distance = cosine(x_q_test_clean, x_q_test)
+        adv_distances[key] = distance
+    #
+    return adv_distances
+
+def vq_distance_evaluate(vq_hard, attack_file_path, x_test, path='q', gaussian = False, dimensions = [0,64]):
+    x_test_advs = np.load(attack_file_path, allow_pickle=True).item()
+    adv_distances = {}
+    #
+    if path == 'q':
+        feature_func = get_zq
+    else:
+        feature_func = get_ze
+    # 
+    x_q_test_clean = feature_func(x_test, vq_hard)
+    x_q_test_clean = x_q_test_clean.reshape(-1, x_q_test_clean.shape[-1])[:,dimensions[0]:dimensions[1]]
+    for key in x_test_advs:
+        if gaussian == False:
+            x_test_adv = x_test_advs[key]
+        else:
+            x_test_adv = x_test + np.random.normal(scale = key, size = x_test.shape)
+        x_q_test = feature_func(x_test_adv, vq_hard)
+        x_q_test = x_q_test.reshape(-1, x_q_test.shape[-1])[:,dimensions[0]:dimensions[1]]
+        distance = cosine(x_q_test_clean, x_q_test)
+        adv_distances[key] = distance
+    #
+    return adv_distances
+
+
+def evaluate_distance(**args):
+    # Get data
+    x_train, y_train, x_test, y_test, x_val, y_val, _min, _max = load_train_eval_test(args['data'], fashion = args['fashion'], norm = True)
+
+    # Load attack file and evaluate
+    if args['data'] == 'cifar':
+        params = cifar_pool5_regularizer
+        paths = ['save_val/attacks/CIFAR_pool3_BIM_copy_x_test_advs.npy', 'save_val/attacks/CIFAR_pool3_FGSM_copy_x_test_advs.npy']
+    else:
+        if args['fashion'] == False:
+            name = 'MNIST'
+            params = mnist_A
+        else:
+            name = 'Fashion'
+            params = fashion_mnist_A
+
+        paths = ['save_val/attacks/'+name+ '_BIM_copy_x_test_advs.npy', 'save_val/attacks/'+name+ '_FGSM_copy_x_test_advs.npy']
+
+
+    save_path = params.save_path
+
+    # Load CNN and VQ
+    sess_cnn, cnn = load_cnn(cifar_pool5_regularizer.cnn, args['cnn_path'], load_last=True)            
+    vq_hard = load_vq(args['load_path'], config, args['last_name'])
+
+
+    attack_names = ['BIM', 'FGSM']
+    for index, black_flag in enumerate([args['BIM_black'], args['FGSM_black']]):
+        if black_flag:
+            attack_file_path = paths[index]
+
+            # Get distance logs
+            cnn_attack_distance = cnn_distance_evaluate(cnn, attack_file_path, x_test, gaussian=False, dimensions = [0,64])
+            vq_attack_distance_e = vq_distance_evaluate(vq_hard, attack_file_path, x_test, path = 'e', gaussian=False, dimensions = [0,64])
+            vq_attack_distance_q = vq_distance_evaluate(vq_hard, attack_file_path, x_test, path = 'q', gaussian=False, dimensions = [0,64])
+
+            print('---CNN Distance---')
+            for key in cnn_attack_distance:
+                print(key, cnn_attack_distance[key].mean())
+
+            print('---VQ E-Path Distance---')
+            for key in vq_attack_distance_e:
+                print(key, vq_attack_distance_e[key].mean())
+
+            print('---VQ Q-Path Distance---')
+            for key in vq_attack_distance_q:
+                print(key, vq_attack_distance_q[key].mean())
+                    
+
+
+
+def plot_distance_figure(cnn_attack_distance, vq_attack_distance_e, vq_attack_distance_q, key):
+    cmap = plt.get_cmap('tab10')
+    results = [
+        vq_attack_distance_q[key],
+        vq_attack_distance_e[key],
+        cnn_attack_distance[key]
+    ]
+    
+    name_list = ['z_q','z_e', 'CNN']
+    maps = [3,1,0]
+    f, ax =  plt.subplots(nrows=1, ncols=1, figsize=(10,5))
+
+    for i in range(3):
+        c = results[i]
+        align = 'mid'
+        n, bins, patches = ax.hist(x=c, bins=10, range=(0,1), color=cmap(maps[i]), label=name_list[i],
+                                        alpha=0.4, align=align, weights=np.ones(len(c)) / len(c))
+
+    plt.legend()
+    f.savefig('./distance_figure',bbox_inches='tight',dpi=f.dpi,pad_inches=0.0)
 
 def evaluate(**args):
     # Get data
