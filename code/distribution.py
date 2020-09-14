@@ -20,6 +20,7 @@ from load_data import *
 from params import cifar_pool5_regularizer, mnist_A, fashion_mnist_A
 from pixelcnn.core.layers import PixelCNN
 import seaborn as sb
+from keras.layers import Lambda
 
 
 # random seed
@@ -43,17 +44,22 @@ def get_zq(X, vq_hard, reshape = False):
         with vq_hard.sess.graph.as_default():
             feature_model = Model(vq_hard.input_x, vq_hard.z_q)
             features = feature_model.predict(X, batch_size=256)
+    
     return features
 
-def get_zk(X, vq_hard):
+def get_zk(X, vq_hard, to_categorical = True):
     with vq_hard.sess.as_default():
         with vq_hard.sess.graph.as_default():
-            feature_model = Model(vq_hard.input_x, vq_hard.z_k)
+            feature_model = Model(vq_hard.input_x, Lambda(lambda x:tf.transpose(x, [1,0,2]))(vq_hard.z_ks))
             features = feature_model.predict(X, batch_size=256)
-
-    temp = features
-    temp = np_utils.to_categorical(np.uint8(temp), num_classes = vq_hard.num_concept, dtype=np.uint8).transpose(1,2,0, -1).reshape(X.shape[0],-1,vq_hard.num_concept)
-    return temp
+    features = features[:,0]
+    # 
+    if to_categorical:
+        temp = features
+        temp = np_utils.to_categorical(np.uint8(temp), num_classes = vq_hard.num_concept, dtype=np.uint8).transpose(1,2,0, -1).reshape(X.shape[0],-1,vq_hard.num_concept)
+        return temp
+    else:
+        return features
 
 def get_ze(X, vq_hard):
     with vq_hard.sess.as_default():
@@ -83,7 +89,6 @@ def get_data(X, vq_hard, batch_size = 256):
             step = 0
             shuffle(indexs)
         yield X_q_train, X_k_train
-
 
 
 def get_pixel_data(X, batch_size = 128):
@@ -313,11 +318,22 @@ import scipy.spatial.distance as distance
 def cosine(x, y):
     return (x*y).sum(-1) / np.sqrt((x*x).sum(-1) * (y*y).sum(-1))
 
-def cnn_distance_evaluate(cnn, attack_file_path, x_test, gaussian = False, dimensions = [0,64]):
+def cnn_distance_evaluate(cnn, attack_file_path, x_test, gaussian = False, dimensions = [0,64], norm = False, mse = False):
     x_test_advs = np.load(attack_file_path, allow_pickle=True).item()
     adv_distances = {}
     x_q_test_clean = get_cnn_feature(x_test, cnn)
     x_q_test_clean = x_q_test_clean.reshape(-1, x_q_test_clean.shape[-1])[:,dimensions[0]:dimensions[1]]
+    mean_ = np.mean(x_q_test_clean, axis=0)
+    std_ = np.std(x_q_test_clean, axis=0)
+
+    if norm == True:
+        x_q_test_clean = (x_q_test_clean - mean_) / std_
+
+    if 0 not in x_test_advs:
+        index = np.arange(len(x_test))
+        np.random.shuffle(index)
+        x_test_advs[0] = x_test[index]
+
     for key in x_test_advs:
         if gaussian == False:
             x_test_adv = x_test_advs[key]
@@ -325,12 +341,20 @@ def cnn_distance_evaluate(cnn, attack_file_path, x_test, gaussian = False, dimen
             x_test_adv = x_test + np.random.normal(scale = key, size = x_test.shape)
         x_q_test = get_cnn_feature(x_test_advs[key], cnn)
         x_q_test = x_q_test.reshape(-1, x_q_test.shape[-1])[:,dimensions[0]:dimensions[1]]
-        distance = cosine(x_q_test_clean, x_q_test)
+
+        if norm == True:
+            x_q_test = (x_q_test - mean_) / std_
+
+        if mse == True:
+            distance = np.sum(np.square(x_q_test_clean - x_q_test))
+        else:
+            distance = cosine(x_q_test_clean, x_q_test)
+
         adv_distances[key] = distance
     #
     return adv_distances
 
-def vq_distance_evaluate(vq_hard, attack_file_path, x_test, path='q', gaussian = False, dimensions = [0,64]):
+def vq_distance_evaluate(vq_hard, attack_file_path, x_test, path='q', gaussian = False, dimensions = [0,64], norm = False, mse = False):
     x_test_advs = np.load(attack_file_path, allow_pickle=True).item()
     adv_distances = {}
     #
@@ -341,14 +365,34 @@ def vq_distance_evaluate(vq_hard, attack_file_path, x_test, path='q', gaussian =
     # 
     x_q_test_clean = feature_func(x_test, vq_hard)
     x_q_test_clean = x_q_test_clean.reshape(-1, x_q_test_clean.shape[-1])[:,dimensions[0]:dimensions[1]]
+    
+    mean_ = np.mean(x_q_test_clean, axis=0)
+    std_ = np.std(x_q_test_clean, axis=0)
+    if norm == True:
+        x_q_test_clean = (x_q_test_clean - mean_) / std_
+
+    if 0 not in x_test_advs:
+        index = np.arange(len(x_test))
+        np.random.shuffle(index)
+        x_test_advs[0] = x_test[index]
+
     for key in x_test_advs:
         if gaussian == False:
             x_test_adv = x_test_advs[key]
         else:
             x_test_adv = x_test + np.random.normal(scale = key, size = x_test.shape)
+
         x_q_test = feature_func(x_test_adv, vq_hard)
         x_q_test = x_q_test.reshape(-1, x_q_test.shape[-1])[:,dimensions[0]:dimensions[1]]
-        distance = cosine(x_q_test_clean, x_q_test)
+
+        if norm == True:
+            x_q_test = (x_q_test - mean_) / std_
+
+        if mse == True:
+            distance = np.sum(np.square(x_q_test_clean - x_q_test))
+        else:
+            distance = cosine(x_q_test_clean, x_q_test)
+
         adv_distances[key] = distance
     #
     return adv_distances
@@ -405,26 +449,28 @@ def evaluate_distance(**args):
 
 
 
-def plot_distance_figure(cnn_attack_distance, vq_attack_distance_e, vq_attack_distance_q, key):
+def plot_distance_figure(cnn_attack_distance, vq_attack_distance_e, vq_attack_distance_q, key, name, no_ground = None):
     cmap = plt.get_cmap('tab10')
     results = [
         vq_attack_distance_q[key],
         vq_attack_distance_e[key],
         cnn_attack_distance[key]
     ]
-    
     name_list = ['z_q','z_e', 'CNN']
     maps = [3,1,0]
     f, ax =  plt.subplots(nrows=1, ncols=1, figsize=(10,5))
-
     for i in range(3):
-        c = results[i]
+        if no_ground is None:
+            c = results[i]
+        else:
+            c = results[i][no_ground]
         align = 'mid'
-        n, bins, patches = ax.hist(x=c, bins=10, range=(0,1), color=cmap(maps[i]), label=name_list[i],
+        n, bins, patches = ax.hist(x=c, bins=10, range=(-1,1), color=cmap(maps[i]), label=name_list[i],
                                         alpha=0.4, align=align, weights=np.ones(len(c)) / len(c))
-
     plt.legend()
-    f.savefig('./distance_figure',bbox_inches='tight',dpi=f.dpi,pad_inches=0.0)
+    f.savefig('./'+ name + '_' + str(key) + '.png',bbox_inches='tight',dpi=f.dpi,pad_inches=0.0)
+                    
+
 
 def evaluate(**args):
     # Get data
@@ -493,7 +539,7 @@ def plot_figures(test_out_log_sum, adv_out_log_sum, save_path, size = 28, num_cl
     sb.distplot(test_out_log_sum/size/size/num_classes,label='clean')
     sb.distplot(adv_out_log_sum/size/size/num_classes,label='adv')
     plt.legend()
-    plt.title('Distribution')
+    # plt.title('Distribution')
     f.savefig(save_path,bbox_inches='tight',dpi=f.dpi,pad_inches=0.0)
 
 
@@ -502,6 +548,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", type=str, help='run which task', required=True)
     parser.add_argument("--mode", type=str, help='VQ or pixel', required=False)
+    parser.add_argument("--figure_path", type=str, help='Figure Path', required=False)
 
     parser.add_argument("--data", type=str, help='mnist or cifar?',default='mnist')
     parser.add_argument("--fashion", type=bool, help='fashion mnist?',default=False)
