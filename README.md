@@ -7,18 +7,18 @@ The project is implemented with Tensorflow 1.15. Taking the Fashion-MNIST datase
 ## Step 1: Prepare Dataset
 Download the Fashion dataset to ./data/fashion
 
-### 1.1: Protector trains a validation CNN
+#### 1.1: Protector trains a validation CNN
 `python rawtrain.py --task MNIST_CNN_1 --fashion True --early_stop 10 --epochs 40 --save_path cnn_validation/`
 
-### 1.2: Protector generates a validation set
+#### 1.2: Protector generates a validation set
 Assign the source model path as the protector's validation CNN path. 
 
 `python adv_test.py --task MNIST_generate_black_box_data --fashion True --cnn_path cnn_validation/ --eps [0.1] --validation_file True`
 
-### 1.3: Attacker trains a source CNN
+#### 1.3: Attacker trains a source CNN
 `python rawtrain.py --task MNIST_CNN_1 --fashion True --early_stop 10 --epochs 40 --save_path cnn_attack/`
 
-### 1.4: Attacker generates black-box adversarial testing sets
+#### 1.4: Attacker generates black-box adversarial testing sets
 Assign the source model path as the Attacker's source CNN path. Generate adversarial testing sets.
 
 `python adv_test.py --task MNIST_generate_black_box_data --fashion True --cnn_path cnn_attack/ --eps [0.1,0.15]`
