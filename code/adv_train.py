@@ -1,5 +1,5 @@
 import tensorflow as tf
-tf.logging.set_verbosity(tf.logging.ERROR)
+# tf.logging.set_verbosity(tf.logging.ERROR)
 
 import keras.backend as K
 from keras.preprocessing.image import ImageDataGenerator
@@ -14,7 +14,7 @@ from load_data import *
 from models.vq_models import *
 from models.basic_model import *
 from utils import *
-from params import cifar_pool5_regularizer, mnist_A, fashion_mnist_A
+from params import cifar_param, mnist_param, fashion_param
 from art.attacks import FastGradientMethod, BasicIterativeMethod, ProjectedGradientDescent
 from art.classifiers import KerasClassifier, TFClassifier
 from art.defences import *
@@ -147,9 +147,9 @@ def MNIST_CNN(**args):
 
     # Params
     if args['fashion'] == False:
-        params = mnist_A
+        params = mnist_param
     else:
-        params = fashion_mnist_A
+        params = fashion_param
 
     save_path = params.save_path
 
@@ -193,9 +193,9 @@ def MNIST_VQ(**args):
 
     # Params
     if args['fashion'] == False:
-        params = mnist_A
+        params = mnist_param
     else:
-        params = fashion_mnist_A
+        params = fashion_param
 
     save_path = params.save_path
 
@@ -255,7 +255,7 @@ def CIFAR_CNN(**args):
     datagen.fit(x_train)
 
     # Params
-    params = cifar_pool5_regularizer
+    params = cifar_param
     save_path = params.save_path
 
     # Adv train CNN
@@ -304,7 +304,7 @@ def CIFAR_VQ(**args):
     datagen.fit(x_train)
 
     # Params
-    params = cifar_pool5_regularizer
+    params = cifar_param
     save_path = params.save_path
 
     # Adv train VQ
@@ -347,21 +347,21 @@ def CIFAR_VQ(**args):
 
 def main():   
     parser = argparse.ArgumentParser()
-    parser.add_argument("--task", type=str, help='run which task',default='CIFAR_CNN', required=False)
-    parser.add_argument("--fashion", type=bool, help='fashion mnist?',default=False)
+    parser.add_argument("--task", type=str, help='run which task',required=True)
+    parser.add_argument("--fashion", type=str2bool, help='fashion mnist?',default='False')
 
-    parser.add_argument("--epochs",type=int, help='update', default= 100)
+    parser.add_argument("--epochs",type=int, help='epochs', default= 100)
     parser.add_argument("--early_stop",type=int, help='early_stop', default= 30)
 
-    parser.add_argument("--load_path",type=str, help='load path', required=False, default='save_val/cifar_01/cnn_pool3_baseline/')
+    parser.add_argument("--load_path",type=str, help='load path', required=True)
     parser.add_argument("--last_name",type=str, help='load_last', required=False)
 
-    parser.add_argument("--save_best",type=str, help='save_best', default='q', required=False)
+    parser.add_argument("--save_best",type=str, help='save_best', default='1')
     parser.add_argument("--gpu",type=str, help='GPU', default='0', required=False)
 
-    parser.add_argument("--eps",type=float, help='eps', default=0.2, required=False)
-    parser.add_argument("--ratio",type=float, help='ratio', default=1, required=False)
-    parser.add_argument("--PGD", type=bool, help='PGD training?',default=False)
+    parser.add_argument("--eps",type=float, help='eps', default=0.2)
+    parser.add_argument("--ratio",type=float, help='ratio', default=1)
+    parser.add_argument("--PGD", type=str2bool, help='PGD training?',default='False')
 
 
 

@@ -5,16 +5,16 @@ input_shape = (28,28,1)
 batch_size = 128
 pre_class = 10
 length = 50000
-save_path = './save_val/mnist_A/'
+save_path = './save_val/fashion/'
 
 regularizer = 0.0005
 lr = 0.001
 
 heads = 4
-num_concept = 64
+num_concept = 128
 
-dense_dim = 16
-concept_dim = 16
+dense_dim = 64
+concept_dim = 64
 classifier_dim = 128
 
 
@@ -26,12 +26,13 @@ cnn = {
     'mode':mode,
     'batch_size':batch_size,
     'regularizer':regularizer,
-    'save_path': save_path + 'cnn_vgg/',
+    'save_path': save_path + 'cnn/',
     'optimizer':'Adam'
 }
 
 cnn_B = copy.copy(cnn)
 cnn_B['mode'] = 'B'
+cnn_B['classifier_dim'] = 0
 cnn_B['save_path'] = save_path + 'cnn_B/'
 
 
@@ -56,7 +57,7 @@ hard = {
     'mode':mode,
     'batch_size': batch_size,
     'distribute_size': None,
-    'update': False,
+    'update': True,
     'update_lr':0.001,
     'save_best':True,
     'regularizer':regularizer,
@@ -64,13 +65,10 @@ hard = {
     'save_path': save_path + 'hard/',
     'direct_pass': False,
     'omega':0,
-    'optimizer':'AdamOptimizer',
+    'optimizer':'AdamOptimizer'
 }
 
-
 hard_inter = copy.copy(hard)
-# hard_inter['start_layer'] = 'A_start'
-# hard_inter['inter_layer'] = 'A_start'
 hard_inter['inter_layer'] = 'vgg16_pool0.5'
 hard_inter['start_layer'] = 'vgg16_start'
 hard_inter['batch_size'] = 128

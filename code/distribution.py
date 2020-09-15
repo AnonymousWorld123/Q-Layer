@@ -17,7 +17,7 @@ import argparse
 from utils import *
 import logging
 from load_data import *
-from params import cifar_pool5_regularizer, mnist_A, fashion_mnist_A
+from params import cifar_param, mnist_param, fashion_param
 from pixelcnn.core.layers import PixelCNN
 import seaborn as sb
 from keras.layers import Lambda
@@ -228,12 +228,12 @@ def VQ_train(**args):
 
     # Params
     if args['data'] == 'cifar':
-        params = cifar_pool5_regularizer
+        params = cifar_param
     else:
         if args['fashion'] == False:
-            params = mnist_A
+            params = mnist_param
         else:
-            params = fashion_mnist_A
+            params = fashion_param
 
     save_path = params.save_path
 
@@ -278,12 +278,12 @@ def pixel_train(**args):
 
     # Params
     if args['data'] == 'cifar':
-        params = cifar_pool5_regularizer
+        params = cifar_param
     else:
         if args['fashion'] == False:
-            params = mnist_A
+            params = mnist_param
         else:
-            params = fashion_mnist_A
+            params = fashion_param
 
     save_path = params.save_path
 
@@ -325,15 +325,15 @@ def cnn_distance_evaluate(cnn, attack_file_path, x_test, gaussian = False, dimen
     x_q_test_clean = x_q_test_clean.reshape(-1, x_q_test_clean.shape[-1])[:,dimensions[0]:dimensions[1]]
     mean_ = np.mean(x_q_test_clean, axis=0)
     std_ = np.std(x_q_test_clean, axis=0)
-
+    # 
     if norm == True:
         x_q_test_clean = (x_q_test_clean - mean_) / std_
-
+    # 
     if 0 not in x_test_advs:
         index = np.arange(len(x_test))
         np.random.shuffle(index)
         x_test_advs[0] = x_test[index]
-
+    # 
     for key in x_test_advs:
         if gaussian == False:
             x_test_adv = x_test_advs[key]
@@ -341,15 +341,15 @@ def cnn_distance_evaluate(cnn, attack_file_path, x_test, gaussian = False, dimen
             x_test_adv = x_test + np.random.normal(scale = key, size = x_test.shape)
         x_q_test = get_cnn_feature(x_test_advs[key], cnn)
         x_q_test = x_q_test.reshape(-1, x_q_test.shape[-1])[:,dimensions[0]:dimensions[1]]
-
+        # 
         if norm == True:
             x_q_test = (x_q_test - mean_) / std_
-
+        # 
         if mse == True:
-            distance = np.sum(np.square(x_q_test_clean - x_q_test))
+            distance = np.sum(np.square(x_q_test_clean - x_q_test), axis = 1)
         else:
             distance = cosine(x_q_test_clean, x_q_test)
-
+        # 
         adv_distances[key] = distance
     #
     return adv_distances
@@ -365,34 +365,34 @@ def vq_distance_evaluate(vq_hard, attack_file_path, x_test, path='q', gaussian =
     # 
     x_q_test_clean = feature_func(x_test, vq_hard)
     x_q_test_clean = x_q_test_clean.reshape(-1, x_q_test_clean.shape[-1])[:,dimensions[0]:dimensions[1]]
-    
+    # 
     mean_ = np.mean(x_q_test_clean, axis=0)
     std_ = np.std(x_q_test_clean, axis=0)
     if norm == True:
         x_q_test_clean = (x_q_test_clean - mean_) / std_
-
+    # 
     if 0 not in x_test_advs:
         index = np.arange(len(x_test))
         np.random.shuffle(index)
         x_test_advs[0] = x_test[index]
-
+    # 
     for key in x_test_advs:
         if gaussian == False:
             x_test_adv = x_test_advs[key]
         else:
             x_test_adv = x_test + np.random.normal(scale = key, size = x_test.shape)
-
+        # 
         x_q_test = feature_func(x_test_adv, vq_hard)
         x_q_test = x_q_test.reshape(-1, x_q_test.shape[-1])[:,dimensions[0]:dimensions[1]]
-
+        # 
         if norm == True:
             x_q_test = (x_q_test - mean_) / std_
-
+        # 
         if mse == True:
-            distance = np.sum(np.square(x_q_test_clean - x_q_test))
+            distance = np.sum(np.square(x_q_test_clean - x_q_test), axis = 1)
         else:
             distance = cosine(x_q_test_clean, x_q_test)
-
+        # 
         adv_distances[key] = distance
     #
     return adv_distances
@@ -404,15 +404,15 @@ def evaluate_distance(**args):
 
     # Load attack file and evaluate
     if args['data'] == 'cifar':
-        params = cifar_pool5_regularizer
+        params = cifar_param
         paths = ['save_val/attacks/CIFAR_pool3_BIM_copy_x_test_advs.npy', 'save_val/attacks/CIFAR_pool3_FGSM_copy_x_test_advs.npy']
     else:
         if args['fashion'] == False:
             name = 'MNIST'
-            params = mnist_A
+            params = mnist_param
         else:
             name = 'Fashion'
-            params = fashion_mnist_A
+            params = fashion_param
 
         paths = ['save_val/attacks/'+name+ '_BIM_copy_x_test_advs.npy', 'save_val/attacks/'+name+ '_FGSM_copy_x_test_advs.npy']
 
@@ -420,7 +420,7 @@ def evaluate_distance(**args):
     save_path = params.save_path
 
     # Load CNN and VQ
-    sess_cnn, cnn = load_cnn(cifar_pool5_regularizer.cnn, args['cnn_path'], load_last=True)            
+    sess_cnn, cnn = load_cnn(cifar_param.cnn, args['cnn_path'], load_last=True)            
     vq_hard = load_vq(args['load_path'], config, args['last_name'])
 
 
@@ -485,15 +485,15 @@ def evaluate(**args):
 
     # Load attack file and evaluate
     if args['data'] == 'cifar':
-        params = cifar_pool5_regularizer
+        params = cifar_param
         paths = ['save_val/attacks/CIFAR_pool3_BIM_copy_x_test_advs.npy', 'save_val/attacks/CIFAR_pool3_FGSM_copy_x_test_advs.npy']
     else:
         if args['fashion'] == False:
             name = 'MNIST'
-            params = mnist_A
+            params = mnist_param
         else:
             name = 'Fashion'
-            params = fashion_mnist_A
+            params = fashion_param
 
         paths = ['save_val/attacks/'+name+ '_BIM_copy_x_test_advs.npy', 'save_val/attacks/'+name+ '_FGSM_copy_x_test_advs.npy']
 

@@ -1,5 +1,5 @@
 import tensorflow as tf
-tf.logging.set_verbosity(tf.logging.ERROR)
+# tf.logging.set_verbosity(tf.logging.ERROR)
 
 import keras.backend as K
 import argparse
@@ -13,7 +13,7 @@ import os
 from load_data import *
 from models.vq_models import *
 from utils import *
-from params import cifar_pool5_regularizer, mnist_A, fashion_mnist_A
+from params import cifar_param, mnist_param, fashion_param
 from art.attacks import DeepFool, FastGradientMethod, BasicIterativeMethod, BoundaryAttack
 from art.classifiers import KerasClassifier, TFClassifier
 import logging
@@ -108,24 +108,30 @@ def rawtrain_vq(params, config, x_train, y_train, x_val, y_val, epochs = 100, da
 
 def MNIST_CNN_1(**args):
     '''
-    Train a regular CNN
-    Use this CNN to generate x_val_adv
+    Train a regular CNN for generating a validation set and adversarial testing sets.
     '''
 
     # Params
     if args['fashion'] == False:
-        params = mnist_A
+        print('Train MNIST')
+        params = mnist_param
     else:
-        params = fashion_mnist_A
-
-    save_path = params.save_path
-
+        print('Train Fashion')
+        params = fashion_param
+    
     # Get data
     x_train, y_train, x_test, y_test, x_val, y_val, _min, _max = load_train_eval_test('mnist', fashion = args['fashion'])
 
     for item in args:
         if args[item] is not None:
             params.cnn[item] = args[item]
+    
+    if args['save_path'] is not None:
+        params.cnn['save_path'] = params.save_path + args['save_path']
+    else:
+        params.cnn['save_path'] = params.save_path + 'cnn_source/'
+
+    print('Save path:', params.cnn['save_path'])
 
     # Rawtrain CNN
     sess_cnn, cnn = rawtrain_cnn(params.cnn, x_train, y_train, x_val, y_val, epochs = args['epochs'], save_best = args['save_best'])
@@ -133,19 +139,19 @@ def MNIST_CNN_1(**args):
     
 
     # Generate adv_val for selection
-    attack = FastGradientMethod
-    kwargs = {
-        'eps':args['eps'],
-        'batch_size': 128,
-        'eps_step':0.1,
-    }
+    # attack = FastGradientMethod
+    # kwargs = {
+    #     'eps':args['eps'],
+    #     'batch_size': 128,
+    #     'eps_step':0.1,
+    # }
 
-    x_val_adv = generate_adv_samples(classifier_cnn, sess_cnn, attack, x_val)
+    # x_val_adv = generate_adv_samples(classifier_cnn, sess_cnn, attack, x_val)
 
-    if args['fashion'] == False:
-        np.save('./save_val/mnist_x_val_adv_vgg.npy',x_val_adv)
-    else:
-        np.save('./save_val/fashion_x_val_adv_vgg.npy',x_val_adv)
+    # if args['fashion'] == False:
+    #     np.save('./save_val/mnist_x_val_adv_vgg.npy',x_val_adv)
+    # else:
+    #     np.save('./save_val/fashion_x_val_adv_vgg.npy',x_val_adv)
 
 
 def MNIST_CNN_2(**args):
@@ -156,11 +162,9 @@ def MNIST_CNN_2(**args):
 
     # Params
     if args['fashion'] == False:
-        params = mnist_A
+        params = mnist_param
     else:
-        params = fashion_mnist_A
-
-    save_path = params.save_path
+        params = fashion_param
 
     # Get data
     x_train, y_train, x_test, y_test, x_val, y_val, _min, _max = load_train_eval_test('mnist', fashion = args['fashion'])
@@ -174,15 +178,15 @@ def MNIST_CNN_2(**args):
     x_val = np.append(x_val, x_val_adv, axis=0)
     y_val = np.append(y_val, y_val, axis=0)
 
-    # Rawtrain CNN
-    if args['save_path'] is None:
-        params.cnn['save_path'] = save_path + 'cnn_baseline/'
-    else:
-        params.cnn['save_path'] = save_path + args['save_path']
-    
     for item in args:
         if args[item] is not None:
             params.cnn[item] = args[item]
+    
+    # Rawtrain CNN
+    if args['save_path'] is None:
+        params.cnn['save_path'] = params.save_path + 'cnn_baseline/'
+    else:
+        params.cnn['save_path'] = params.save_path + args['save_path']
     
     sess_cnn, cnn = rawtrain_cnn(params.cnn, x_train, y_train, x_val, y_val, epochs = args['epochs'], save_best = args['save_best'])
 
@@ -191,11 +195,14 @@ def MNIST_VQ(**args):
 
     # Params
     if args['fashion'] == False:
-        params = mnist_A
+        params = mnist_param
     else:
-        params = fashion_mnist_A
+        params = fashion_param
 
     save_path = params.save_path
+    if os.path.exists(save_path + 'hard/') == False:
+        os.mkdir(save_path + 'hard/')
+
 
     # Get data
     x_train, y_train, x_test, y_test, x_val, y_val, _min, _max = load_train_eval_test('mnist', fashion = args['fashion'])
@@ -236,8 +243,9 @@ def CIFAR_CNN_1(**args):
 
 
     # Params
-    params = cifar_pool5_regularizer
-    save_path = params.save_path
+    params = cifar_param
+    if args['save_path'] is not None:
+        params.cnn['save_path'] = params.save_path + args['save_path']
 
     # Get data for cifar
     x_train, y_train, x_test, y_test, x_val, y_val, _min, _max = load_train_eval_test('cifar')
@@ -261,24 +269,24 @@ def CIFAR_CNN_1(**args):
     classifier_cnn = KerasClassifier(model=cnn.model, clip_values=(_min, _max))
 
     # Generate adv_val for selection
-    attack = FastGradientMethod
-    kwargs = {
-        'eps':args['eps'],
-        'batch_size': 128,
-        'eps_step':0.1,
-    }
+    # attack = FastGradientMethod
+    # kwargs = {
+    #     'eps':args['eps'],
+    #     'batch_size': 128,
+    #     'eps_step':0.1,
+    # }
 
-    x_val_adv = generate_adv_samples(classifier_cnn, sess_cnn, attack, x_val)
+    # x_val_adv = generate_adv_samples(classifier_cnn, sess_cnn, attack, x_val)
 
     # # Add adv samples to the val set
-    x_val_adv = np.load('./save_val/cifar_01_pool3_x_val_adv.npy')
-    x_val = np.append(x_val, x_val_adv, axis=0)
-    y_val = np.append(y_val, y_val, axis=0)
+    # x_val_adv = np.load('./save_val/cifar_01_pool3_x_val_adv.npy')
+    # x_val = np.append(x_val, x_val_adv, axis=0)
+    # y_val = np.append(y_val, y_val, axis=0)
 
 
 def CIFAR_CNN_2(**args):
     # Params
-    params = cifar_pool5_regularizer
+    params = cifar_param
     save_path = params.save_path
 
     # Get data for cifar
@@ -312,8 +320,11 @@ def CIFAR_CNN_2(**args):
 
 
 def CIFAR_VQ(**args):
-    params = cifar_pool5_regularizer
+    params = cifar_param
     save_path = params.save_path
+    
+    if os.path.exists(save_path + 'hard/') == False:
+        os.mkdir(save_path + 'hard/')
 
     # Get data for cifar
     x_train, y_train, x_test, y_test, x_val, y_val, _min, _max = load_train_eval_test('cifar')
@@ -363,17 +374,17 @@ def main():
     
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", type=str, help='run which task',default='MNIST_VQ', required=False)
-    parser.add_argument("--fashion", type=bool, help='fashion mnist?',default=False)
+    parser.add_argument("--fashion", type=str2bool, help='fashion mnist?',default='False')
 
     parser.add_argument("--eps", type=float, help='eps used to generate validation data?',default=0.3)
     parser.add_argument("--epochs",type=int, help='update', default=100)
     parser.add_argument("--save_path",type=str, help='save path', required=False)
-    parser.add_argument("--save_best",type=str, help='save_best', default='q')
+    parser.add_argument("--save_best",type=str, help='save_best', default='1')
 
     parser.add_argument("--num_concept",type=int, help='num_concept',required=False)
-    parser.add_argument("--set_trans",type=int, help='set_trans',default=0)
-    parser.add_argument("--set_att",type=int, help='set_fixed',default=0)
-    parser.add_argument("--set_fixed",type=int, help='set_fixed',default=1)
+    parser.add_argument("--set_trans",type=int, help='set_trans',default=0) # These are different projection methods
+    parser.add_argument("--set_att",type=int, help='set_fixed',default=0) # These are different projection methods
+    parser.add_argument("--set_fixed",type=int, help='set_fixed',default=1) # These are different projection methods
     parser.add_argument("--dim",type=int, help='dense_dim',default=64) 
     # parser.add_argument("--concept_dim",type=int, help='concept_dim',default=16)
     # parser.add_argument("--classifier_dim",type=int, help='concept_dim',required=False)
@@ -381,7 +392,7 @@ def main():
     parser.add_argument("--mode",type=str, help='mode', required=False)
     parser.add_argument("--start_layer",type=str, help='start_layer', required=False)
     parser.add_argument("--inter_layer",type=str, help='inter_layer', required=False)
-    parser.add_argument("--share_backward",type=bool, help='share_backward', default=True)
+    parser.add_argument("--share_backward",type=str2bool, help='share_backward', default='True')
     parser.add_argument("--update",type=str, help='update', default='train')
 
     parser.add_argument("--early_stop",type=int, help='early_stop', required = False)

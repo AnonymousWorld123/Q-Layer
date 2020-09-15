@@ -1,5 +1,5 @@
 import tensorflow as tf
-tf.logging.set_verbosity(tf.logging.ERROR)
+# tf.logging.set_verbosity(tf.logging.ERROR)
 
 import keras.backend as K
 from art.attacks import *
@@ -19,7 +19,7 @@ import argparse
 from utils import *
 import logging
 from load_data import *
-from params import cifar_pool5_regularizer, mnist_A, fashion_mnist_A
+from params import cifar_param, mnist_param, fashion_param
 
 # random seed
 seed_value = 0
@@ -171,27 +171,33 @@ def cnn_white_box_test(epss, attacks, sesses, clfs, models, names, x_test, y_tes
 
 
 
-def CIFAR_generate_black_box_data():
+def CIFAR_generate_black_box_data(**args):
     x_train, y_train, x_test, y_test, x_val, y_val, _min, _max = load_train_eval_test('cifar')
 
     # Params
-    params = cifar_pool5_regularizer
+    params = cifar_param
     save_path = params.save_path
 
     # Load CNN
-    params.cnn_pool3['save_path'] = 'save_val/cifar_01/cnn_copy/'
+    params.cnn_pool3['save_path'] = params.save_path + args['cnn_path']
     sess_cnn, cnn = load_cnn(params.cnn_pool3, params.cnn_pool3['save_path'], load_last=True)
     classifier_cnn = KerasClassifier(model=cnn.model, clip_values=(_min, _max))
 
     # Generate Black box data
-    attack = BasicIterativeMethod
-    eps_list = [0.08, 0.1]
+    eps_list = eval(args['eps'])
     classifier = classifier_cnn
     sess = sess_cnn
 
-    x_test_advs = get_adv_samples(attack, eps_list, x_test, classifier, sess, step=0.01)
-    x_test_advs[0] = x_test
-    np.save('save_val/attacks/CIFAR_pool3_BIM_large_copy_x_test_advs.npy',x_test_advs)
+    attack_name = ['FGSM','BIM']
+    if args['validation_file'] == True:
+        attack = FastGradientMethod
+        x_test_advs = get_adv_samples(attack, eps_list, x_test, classifier, sess)
+        np.save('save_val/cifar_01_pool3_x_val_adv.npy', x_test_advs[eps_list[0]])
+    else:
+        for index, attack in enumerate([FastGradientMethod, BasicIterativeMethod]):
+            x_test_advs = get_adv_samples(attack, eps_list, x_test, classifier, sess)
+            x_test_advs[0] = x_test
+            np.save('save_val/attacks/CIFAR_pool3_' + attack_name[index] + '_copy_x_test_advs.npy',x_test_advs)
 
 
 
@@ -202,7 +208,7 @@ def CIFAR(**args):
     x_train, y_train, x_test, y_test, x_val, y_val, _min, _max = load_train_eval_test('cifar')
 
     # Params
-    params = cifar_pool5_regularizer
+    params = cifar_param
     save_path = params.save_path
 
     # Load CNN
@@ -260,18 +266,11 @@ def MNIST_generate_black_box_data(**args):
 
     # Params
     if args['fashion'] == False:
-        params = mnist_A
+        params = mnist_param
     else:
-        params = fashion_mnist_A
+        params = fashion_param
 
-    save_path = params.save_path
-
-    # Load CNN
-    if args['fashion'] == False:
-        params.cnn['save_path'] = 'save_val/mnist_A/cnn_copy/'
-    else:
-        params.cnn['save_path'] = 'save_val/fashion_A/cnn_copy/'
-    
+    params.cnn['save_path'] = params.save_path + args['cnn_path']
     sess_cnn, cnn = load_cnn(params.cnn, params.cnn['save_path'], load_last=True)
     classifier_cnn = KerasClassifier(model=cnn.model, clip_values=(_min, _max))
 
@@ -280,14 +279,22 @@ def MNIST_generate_black_box_data(**args):
     classifier = classifier_cnn
     sess = sess_cnn
     attack_name = ['FGSM','BIM']
-    for index, attack in enumerate([FastGradientMethod, BasicIterativeMethod]):
 
+    if args['validation_file'] == True:
+        attack = FastGradientMethod
         x_test_advs = get_adv_samples(attack, eps_list, x_test, classifier, sess)
-
-        if args['fashion'] == False:
-            np.save('save_val/attacks/MNIST_' + attack_name[index] + '_copy_x_test_advs.npy',x_test_advs)
+        if args['fashion'] == True:
+            np.save('save_val/fashion_x_val_adv_vgg.npy', x_test_advs[eps_list[0]])
         else:
-            np.save('save_val/attacks/Fashion_' + attack_name[index] + '_copy_x_test_advs.npy',x_test_advs)
+            np.save('save_val/mnist_x_val_adv_vgg.npy', x_test_advs[eps_list[0]])
+    else:
+        for index, attack in enumerate([FastGradientMethod, BasicIterativeMethod]):
+            x_test_advs = get_adv_samples(attack, eps_list, x_test, classifier, sess)
+
+            if args['fashion'] == False:
+                np.save('save_val/attacks/MNIST_' + attack_name[index] + '_copy_x_test_advs.npy',x_test_advs)
+            else:
+                np.save('save_val/attacks/Fashion_' + attack_name[index] + '_copy_x_test_advs.npy',x_test_advs)
 
 
 def MNIST(**args):
@@ -297,9 +304,9 @@ def MNIST(**args):
 
     # Params
     if args['fashion'] == False:
-        params = mnist_A
+        params = mnist_param
     else:
-        params = fashion_mnist_A
+        params = fashion_param
 
     save_path = params.save_path
 
@@ -359,7 +366,9 @@ def MNIST(**args):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--task", type=str, help='run which task',default='MNIST_VQ', required=False)
-    parser.add_argument("--fashion", type=bool, help='fashion mnist?',default=False)
+    parser.add_argument("--fashion", type=str2bool, help='fashion mnist?',default='False')
+    parser.add_argument("--validation_file",type=str2bool, help='Generate a validation set?', default='False')
+
 
     parser.add_argument("--vq_path",type=str, help='vq path', required=False)
     parser.add_argument("--cnn_path",type=str, help='cnn path', required=False)
@@ -367,15 +376,15 @@ def main():
 
     parser.add_argument("--gpu",type=str, help='GPU', default='0', required=False)
 
-    parser.add_argument("--FGSM_black",type=bool, help='FGSM black-box attack', default=False)
-    parser.add_argument("--BIM_black",type=bool, help='BIM black-box attack', default=False)
-    parser.add_argument("--FGSM_black_large",type=bool, help='FGSM large black-box attack', default=False)
-    parser.add_argument("--BIM_black_large",type=bool, help='BIM large black-box attack', default=False)
+    parser.add_argument("--FGSM_black",type=str2bool, help='FGSM black-box attack', default='False')
+    parser.add_argument("--BIM_black",type=str2bool, help='BIM black-box attack', default='False')
+    parser.add_argument("--FGSM_black_large",type=str2bool, help='FGSM large black-box attack', default='False')
+    parser.add_argument("--BIM_black_large",type=str2bool, help='BIM large black-box attack', default='False')
     
-    parser.add_argument("--BIM_white",type=bool, help='BIM white attack', default=False)
-    parser.add_argument("--FGSM_white",type=bool, help='FGSM whiteattack', default=False)
-    parser.add_argument("--CIM_white",type=bool, help='CIM white attack', default=False)
-    parser.add_argument("--eps",type=str, help='eps for white attack', default=False)
+    parser.add_argument("--BIM_white",type=str2bool, help='BIM white attack', default='False')
+    parser.add_argument("--FGSM_white",type=str2bool, help='FGSM whiteattack', default='False')
+    parser.add_argument("--CIM_white",type=str2bool, help='CIM white attack', default='False')
+    parser.add_argument("--eps",type=str, help='eps for white attack', default='False')
 
 
     args = parser.parse_args()

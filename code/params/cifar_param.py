@@ -1,7 +1,7 @@
 import copy
 
 mode = 'vgg16_pool5_regularizer'
-save_path = './save_val/cifar_01/'
+save_path = './save_val/cifar/'
 
 input_shape = (32,32,3)
 pre_class = 10
