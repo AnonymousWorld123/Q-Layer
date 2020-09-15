@@ -4,10 +4,10 @@ Code for our paper "Q-Layer: Latent Space Contraints for Robust Convolutional Ne
 # To Use
 The project is implemented with Tensorflow 1.15. Taking the Fashion-MNIST dataset as an example, we show how to train and test a Q-Model as follows:
 
-## Prepare Dataset
+## Step 1: Prepare Dataset
 Download the Fashion dataset to ./data/fashion
 
-### Protector trains a validation CNN
+### Step 1.1: Protector trains a validation CNN
 `python rawtrain.py --task MNIST_CNN_1 --fashion True --early_stop 10 --epochs 40 --save_path cnn_validation/`
 
 ### Protector generates a validation set
@@ -25,7 +25,7 @@ Assign the source model path as the Attacker's source CNN path. Generate adversa
 
 
 
-## Training 
+## Step 2: Training 
 ### Raw-train a baseline CNN
 `python rawtrain.py --task MNIST_CNN_2 --fashion True --early_stop 10 --epochs 40 --save_path cnn_baseline/`
 
@@ -37,7 +37,7 @@ Users can omit the "last_name" argument, which means loading the last checkpoint
 
 `python adv_train.py --task MNIST_VQ --fashion True --load_path ./save_val/fashion/hard/fixed_vgg16_pool0.5_1_64_1_1_0.001_0.001_lr_0.001_dim_64_share_True_update_train/ --last_name [CHECKPOINT NAME]  --eps 0.1 --early_stop 10 --epochs 40`
 
-## Testing
+## Step 3: Testing
 ### Black-box attacks (using the generated adversarial testing sets)
 `python adv_test.py --task MNIST --fashion True --vq_path ./save_val/fashion/hard/fixed_vgg16_pool0.5_1_64_1_1_0.001_0.001_lr_0.001_dim_64_share_True_update_train/ --last_name [CHECKPOINT NAME] --FGSM_black True --BIM_black True`
 
